@@ -121,7 +121,6 @@ bitvector_test(const void *vector, int i)
 }
 
 
-
 /*****************************************************************************
  * OSPFS HELPER FUNCTIONS
  */
@@ -553,7 +552,18 @@ static uint32_t
 allocate_block(void)
 {
 	/* EXERCISE: Your code here */
-	return 0;
+	uint32_t blockno = 0;
+	uint32_t i;
+	for(i = 1; i < ospfs_super->os_nblocks; i++)
+	{
+		if(bitvector_test(ospfs_block(OSPFS_FREEMAP_BLK, i) == 1)
+		{
+			blockno = i;
+			bitvector_clear(ospfs_block(OSPFS_FREEMAP_BLK, i);
+			break;
+		}
+	}
+	return blockno;
 }
 
 
@@ -572,6 +582,12 @@ static void
 free_block(uint32_t blockno)
 {
 	/* EXERCISE: Your code here */
+	// if blockno > last inode index and < total blocks
+	if(blockno > ospfs_super->os_firstinob + ospfs_super->os_ninodes/OSPFS_BLKINODES &&
+		blockno < ospfs_super->os_nblocks)
+	{
+		bitvector_set(ospfs_block(OSPFS_FREEMAP_BLK, blockno);
+	}
 }
 
 
@@ -608,7 +624,10 @@ static int32_t
 indir2_index(uint32_t b)
 {
 	// Your code here.
-	return -1;
+	if(b >= OSPFS_NDIRECT + OSPFS_NINDIRECT)
+		return 0;
+	else
+		return -1;
 }
 
 
@@ -627,7 +646,15 @@ static int32_t
 indir_index(uint32_t b)
 {
 	// Your code here.
-	return -1;
+	// if b is one of direct blocks
+	if(b < OSPFS_NDIRECT)
+		return -1;
+	// if b is in file's first indirect block
+	else if(b < OSPFS_NDIRECT + OSPFS_NINDIRECT)
+		return 0;
+	// if b is in doubly indirect block
+	else
+		return (b - OSPFS_NDIRECT - OSPFS_NINDIRECT) / OSPFS_NINDIRECT;
 }
 
 
@@ -644,7 +671,15 @@ static int32_t
 direct_index(uint32_t b)
 {
 	// Your code here.
-	return -1;
+	// if b is one of direct blocks
+	if(b < OSPFS_NDIRECT)
+		return b;
+	// if b is on of indirect blocks
+	else if(b < OSPFS_NDIRECT + OSPFS_NINDIRECT)
+		return b - OSPFS_NINDIRECT;
+	// if b is in any indirect block of a doubly indirect block
+	else
+		return (b - OSPFS_NDIRECT - OSPFS_NINDIRECT) % OSPFS_NINDIRECT;
 }
 
 
