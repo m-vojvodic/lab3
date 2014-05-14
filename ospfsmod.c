@@ -556,10 +556,10 @@ allocate_block(void)
 	uint32_t i;
 	for(i = 1; i < ospfs_super->os_nblocks; i++)
 	{
-		if(bitvector_test(ospfs_block(OSPFS_FREEMAP_BLK, i) == 1)
+		if(bitvector_test(ospfs_block(OSPFS_FREEMAP_BLK), i) == 1)
 		{
 			blockno = i;
-			bitvector_clear(ospfs_block(OSPFS_FREEMAP_BLK, i);
+			bitvector_clear(ospfs_block(OSPFS_FREEMAP_BLK), i);
 			break;
 		}
 	}
@@ -586,7 +586,7 @@ free_block(uint32_t blockno)
 	if(blockno > ospfs_super->os_firstinob + ospfs_super->os_ninodes/OSPFS_BLKINODES &&
 		blockno < ospfs_super->os_nblocks)
 	{
-		bitvector_set(ospfs_block(OSPFS_FREEMAP_BLK, blockno);
+		bitvector_set(ospfs_block(OSPFS_FREEMAP_BLK), blockno);
 	}
 }
 
@@ -724,7 +724,188 @@ add_block(ospfs_inode_t *oi)
 	uint32_t *allocated[2] = { 0, 0 };
 
 	/* EXERCISE: Your code here */
-	return -EIO; // Replace this line
+
+	// TODO: check for over stepped bounds??
+	uint32_t new_indirect_2_block;
+	uint32_t new_indirect_block;
+	uint32_t new_data_block;
+	uint32_t* indirect_2_block;
+	uint32_t* indirect_block;
+
+	// if space in direct blocks
+	if(n < OSPFS_NDIRECT)
+	{
+		// try to allocate data block
+		new_data_block = allocate_block();
+		if(new_data_block == 0)
+		{
+			return -ENOSPC;
+		}
+
+		// zero out block
+		memset(ospfs_block(new_data_block), 0, OSPFS_BLKSIZE);
+
+		// store in direct blocks
+		oi->oi_direct[n] = new_data_block;
+	}
+	// if need to allocate new indirect block
+	else if(n == OSPFS_NDIRECT)
+	{
+		// try to allocate indirect block
+		new_indirect_block = allocate_block();
+		if(new_indirect_block == 0)
+		{
+			return -ENOSPC;
+		}
+
+		// try to allocate data block
+		new_data_block = allocate_block();
+		if(new_data_block == 0)
+		{
+			free_block(new_indirect_block);
+			return -ENOSPC;
+		}
+
+		// zero out both blocks
+		memset(ospfs_block(new_indirect_block), 0, OSPFS_BLKSIZE);
+		memset(ospfs_block(new_data_block), 0, OSPFS_BLKSIZE);
+
+		// create a pointer to the indirect data block
+		indirect_block = ospfs_block(new_indirect_block);
+		// allocated[0] = indirect_block;
+
+		// store disk block number of indirect in oi, direct in indirect block
+		oi->oi_indirect = indirect_block;
+		indirect_block[0] = new_data_block;
+	}
+	// if within indirect block
+	else if(indir_index(n) == 0)
+	{
+		// try to allocate data block
+		new_data_block = allocate_block();
+		if(new_data_block == 0)
+		{
+			return -ENOSPC;
+		}
+
+		// zero out data block
+		memset(ospfs_block(new_data_block), 0, OSPFS_BLKSIZE);
+
+		// create a pointer to indirect data block
+		indirect_block = ospfs_block(oi->oi_indirect);
+
+		// store data block in correct index of indirect data block
+		indirect_block[direct_index(n)] = new_data_block;
+	}
+	// if need to allocate indirect^2 block
+	else if(n == OSPFS_NDIRECT + OSPFS_NINDIRECT)
+	{
+		// try to allocate indirect^2 block
+		new_indirect_2_block = allocate_block();
+		if(new_indirect_2_block == 0)
+		{
+			return -ENOSPC;
+		}
+
+		// try to allocate indirect block
+		new_indirect_block = allocate_block();
+		if(new_indirect_block == 0)
+		{
+			free_block(new_indirect_2_block);
+			return -ENOSPC;
+		}
+
+		// try to allocate data block
+		new_data_block = allocate_block();
+		if(new_data_block == 0)
+		{
+			free_block(new_indirect_2_block);
+			free_block(new_indirect_block);
+			return -ENOSPC;
+		}
+
+		// zero out the blocks
+		memset(ospfs_block(new_indirect_2_block), 0, OSPFS_BLKSIZE);
+		memset(ospfs_block(new_indirect_block), 0, OSPFS_BLKSIZE);
+		memset(ospfs_block(new_data_block), 0, OSPFS_BLKSIZE);
+
+		// create pointers to indirect^2 and indirect blocks
+		indirect_2_block = ospfs_block(new_indirect_2_block);
+		indirect_block = ospfs_block(new_indirect_block);
+		// allocated[0] = indirect_block;
+		// allocated[1] = indirect_2_block;
+
+		// store indirect^2 block in oi
+		oi->oi_indirect2 = new_indirect_2_block;
+
+		// store blocks respectively
+		indirect_2_block[0] = new_indirect_block;
+		indirect_block[0] = new_data_block;
+	}
+	// need to allocate new indirect block in indirect^2
+	else if(indir2_index(n) == 0 && indir_index(n) > 0 && direct_index(n) == 0)
+	{
+		// try to allocate indirect block
+		new_indirect_block = allocate_block();
+		if(new_indirect_block == 0)
+		{
+			return -ENOSPC;
+		}
+
+		// try to allocate data block
+		new_data_block = allocate_block();
+		if(new_data_block == 0)
+		{
+			free_block(new_indirect_block);
+			return -ENOSPC;
+		}
+
+		// zero out the blocks
+		memset(ospfs_block(new_indirect_block), 0, OSPFS_BLKSIZE);
+		memset(ospfs_block(new_data_block), 0, OSPFS_BLKSIZE);
+
+		// create pointers to indirect^2 block, indirect block
+		indirect_2_block = ospfs_block(oi->oi_indirect2);
+		indirect_block = ospfs_block(new_indirect_block);
+		// allocated[0] = indirect_block;
+
+		// store blocks respectively
+		indirect_2_block[indir_index(n)] = new_indirect_block;
+		indirect_block[0] = new_data_block;
+	}
+	// allocate into indirect block of indirect^2
+	else if(indir2_index(n) == 0 && indir_index(n) > 0 && direct_index(n) > 0)
+	{
+		// try to allocate data block
+		new_data_block = allocate_block();
+		if(new_data_block == 0)
+		{
+			return -ENOSPC;
+		}
+
+		// zero out the block
+		memset(ospfs_block(new_data_block), 0, OSPFS_BLKSIZE);
+
+		// create pointer to indirect^2 block, indirect block within the indirect^2 block
+		// see section above - when creating a new indirect block, must place
+		// into indirect_2_block[indir_index(n)]
+		indirect_2_block = ospfs_block(oi->oi_indirect2);
+		indirect_block = ospfs_block(indirect_2_block[indir_index(n)]);
+
+		// store data block in indirect block
+		indirect_block[direct_index(n)] = new_data_block;
+	}
+	// error: something somewhere went wrong
+	else
+	{
+		return -EIO;
+	}
+
+	// update size
+	// since we only add 1 data block of useful information, increase size
+	// of inode by only 1 block's worth of bits
+	oi->oi_size = (n+1) * OSPFS_BLKSIZE
+	return 0;
 }
 
 
