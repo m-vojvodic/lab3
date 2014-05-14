@@ -904,7 +904,7 @@ add_block(ospfs_inode_t *oi)
 	// update size
 	// since we only add 1 data block of useful information, increase size
 	// of inode by only 1 block's worth of bits
-	oi->oi_size = (n+1) * OSPFS_BLKSIZE
+	oi->oi_size = (n+1) * OSPFS_BLKSIZE;
 	return 0;
 }
 
@@ -986,16 +986,30 @@ change_size(ospfs_inode_t *oi, uint32_t new_size)
 
 	while (ospfs_size2nblocks(oi->oi_size) < ospfs_size2nblocks(new_size)) {
 	        /* EXERCISE: Your code here */
-		return -EIO; // Replace this line
+		r = add_block(oi);
+                if(r == -ENOSPC)
+                {
+                        oi->oi_size = old_size;
+                        return -ENOSPC;
+                }
+		else if(r == -EIO)
+		{
+			return -EIO;
+		}
 	}
 	while (ospfs_size2nblocks(oi->oi_size) > ospfs_size2nblocks(new_size)) {
 	        /* EXERCISE: Your code here */
-		return -EIO; // Replace this line
+		r = remove_block(oi);
+                if(r == -EIO)
+                {
+                        return -EIO;
+                }
 	}
 
 	/* EXERCISE: Make sure you update necessary file meta data
 	             and return the proper value. */
-	return -EIO; // Replace this line
+	oi->oi_size = new_size;
+        return 0;
 }
 
 
@@ -1061,6 +1075,10 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 	// Make sure we don't read past the end of the file!
 	// Change 'count' so we never read past the end of the file.
 	/* EXERCISE: Your code here */
+	if((*f_pos + count) > oi->oi_size)
+        {
+                count = oi->oi_size - *f_pos;
+        }
 
 	// Copy the data to user block by block
 	while (amount < count && retval >= 0) {
@@ -1081,8 +1099,21 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 		// into user space.
 		// Use variable 'n' to track number of bytes moved.
 		/* EXERCISE: Your code here */
-		retval = -EIO; // Replace these lines
-		goto done;
+		uint32_t offset = (*f_pos % OSPFS_BLKSIZE); // remainder if we have already used some of the block
+                // check if you can read in an entire block or not
+                if(((count + offset) - amount) > OSPFS_BLKSIZE)
+                {
+                        n = OSPFS_BLKSIZE - offset;
+                }
+                else
+                {
+                        n = count - amount;
+                }
+                if(copy_to_user(buffer, data, n) != 0)
+                {
+                        retval = -EFAULT;
+                        goto done;
+                }
 
 		buffer += n;
 		amount += n;
@@ -1121,7 +1152,16 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 	// Support files opened with the O_APPEND flag.  To detect O_APPEND,
 	// use struct file's f_flags field and the O_APPEND bit.
 	/* EXERCISE: Your code here */
+	if(filp->f_flags & O_APPEND)
+        {
+                *f_pos = oi->oi_size;
+        }
 
+	 if((*f_pos + count) > oi->oi_size)
+        {
+                change_size(oi, count);
+        }
+	
 	// If the user is writing past the end of the file, change the file's
 	// size to accomodate the request.  (Use change_size().)
 	/* EXERCISE: Your code here */
@@ -1144,8 +1184,23 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 		// read user space.
 		// Keep track of the number of bytes moved in 'n'.
 		/* EXERCISE: Your code here */
-		retval = -EIO; // Replace these lines
-		goto done;
+		uint32_t offset = (*f_pos % OSPFS_BLKSIZE); // remainder if we have already used some of the block
+                // Check if you can write an entire block or not
+                if(((count + offset) - amount) > OSPFS_BLKSIZE)
+                {
+                        n = OSPFS_BLKSIZE - offset;
+                }
+                else
+                {
+                        n = count - amount;
+                }
+
+                if(copy_from_user(data, buffer, n) != 0)
+                {
+                        retval = -EFAULT;
+                        goto done;
+                }
+
 
 		buffer += n;
 		amount += n;
