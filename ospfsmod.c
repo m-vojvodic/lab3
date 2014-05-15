@@ -1267,14 +1267,13 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
                 *f_pos = oi->oi_size;
         }
 
-	 if((*f_pos + count) > oi->oi_size)
-        {
-                change_size(oi, count);
-        }
-	
 	// If the user is writing past the end of the file, change the file's
 	// size to accomodate the request.  (Use change_size().)
 	/* EXERCISE: Your code here */
+	if((*f_pos + count) > oi->oi_size)
+        {
+                change_size(oi, count + *f_pos);
+        }
 
 	// Copy data block by block
 	while (amount < count && retval >= 0) {
@@ -1305,7 +1304,7 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
                         n = count - amount;
                 }
 
-                if(copy_from_user(data, buffer, n) != 0)
+                if(copy_from_user(data + offset, buffer, n) != 0)
                 {
                         retval = -EFAULT;
                         goto done;
