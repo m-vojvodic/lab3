@@ -721,11 +721,16 @@ add_block(ospfs_inode_t *oi)
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
 
 	// keep track of allocations to free in case of -ENOSPC
-	uint32_t *allocated[2] = { 0, 0 };
+	// uint32_t *allocated[2] = { 0, 0 };
 
 	/* EXERCISE: Your code here */
 
-	// TODO: check for over stepped bounds??
+	// check for over stepped bounds
+	if(n > OSPFS_MAXFILEBLKS)
+	{
+		return -EIO;
+	}
+
 	uint32_t new_indirect_2_block;
 	uint32_t new_indirect_block;
 	uint32_t new_data_block;
@@ -775,7 +780,7 @@ add_block(ospfs_inode_t *oi)
 		// allocated[0] = indirect_block;
 
 		// store disk block number of indirect in oi, direct in indirect block
-		oi->oi_indirect = indirect_block;
+		oi->oi_indirect = new_indirect_block;
 		indirect_block[0] = new_data_block;
 	}
 	// if within indirect block
@@ -938,7 +943,112 @@ remove_block(ospfs_inode_t *oi)
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
 
 	/* EXERCISE: Your code here */
-	return -EIO; // Replace this line
+
+	// check for overstepped bounds
+	if(n == 0)
+	{
+		return -EIO;
+	}
+
+	uint32_t delete_indirect_block;
+	uint32_t delete_data_block;
+	uint32_t* indirect_2_block;
+	uint32_t* indirect_block;
+
+	// need to decrement n by one to properly count indices
+	// say n = 10, oi->oi_direct indexed 0...9, remove index 9
+	uint32_t remove_block = n-1;
+
+	// deallocate direct block
+	if(remove_block < OSPFS_NDIRECT)
+	{
+		// free block and set block pointer to 0
+		free_block(oi->oi_direct[remove_block]);
+		oi->oi_direct[remove_block] = 0;
+	}
+	// deallocate indirect block
+	else if(remove_block == OSPFS_NDIRECT)
+	{
+		// create pointer to indirect block
+		indirect_block = ospfs_block(oi->oi_indirect);
+
+		// free only data block in indirect block
+		free_block(indirect_block[0]);
+
+		// free the indirect block, set block pointer to 0
+		free_block(oi->oi_indirect);
+		oi->oi_indirect = 0;
+	}
+	// deallocate data block from indirect block
+	else if(indir_index(remove_block) == 0)
+	{
+		// create pointer to indirect block;
+		indirect_block = ospfs_block(oi->oi_indirect);
+
+		// free the indirect block, set block pointer in indirect to 0
+		free_block(indirect_block[direct_index(remove_block)]);
+		indirect_block[direct_index(remove_block)] = 0;
+	}
+	// deallocate indirect^2 block
+	else if(remove_block == OSPFS_NDIRECT + OSPFS_NINDIRECT)
+	{
+		// create pointers to indirect^2 block and indirect block in it
+		indirect_2_block = ospfs_block(oi->oi_indirect2);
+		indirect_block = ospfs_block(indirect_2_block[0]);
+
+		// specify blocks to remove
+		delete_indirect_block = indirect_2_block[0];
+		delete_data_block = indirect_block[0];
+		
+		// free blocks, set indirect^2 block pointer to 0
+		free_block(delete_data_block);
+		free_block(delete_indirect_block);
+		free_block(oi->oi_indirect2);
+		oi->oi_indirect2 = 0;
+	}
+	// deallocate data block and indirect block
+	else if(indir2_index(remove_block) == 0 && indir_index(remove_block) > 0 && 
+		direct_index(remove_block) == 0)
+	{
+		// create pointers to indirect^2 block and indirect block in it
+		indirect_2_block = ospfs_block(oi->oi_indirect2);
+		indirect_block = ospfs_block(indirect_2_block[indir_index(remove_block)]);
+
+		// specify blocks to remove
+		delete_indirect_block = indirect_2_block[indir_index(remove_block)];
+		delete_data_block = indirect_block[0];
+
+		// free blocks, set block pointer in indirect^2 to 0
+		free_block(delete_data_block);
+		free_block(delete_indirect_block);
+		indirect_2_block[indir_index(remove_block)] = 0;
+	}
+	// deallocate data block from an indirect block in indirect^2 block
+	else if(indir2_index(remove_block) == 0 && indir_index(remove_block) > 0 && 
+		direct_index(remove_block) > 0)
+	{
+		// create pointers to indirect^2 and indirect block in it
+		indirect_2_block = ospfs_block(oi->oi_indirect2);
+		indirect_block = ospfs_block(indirect_2_block[indir_index(remove_block)]);
+
+		// specify block to remove
+		delete_data_block = indirect_block[direct_index(remove_block)];
+
+		// free block, set block pointer in indirect of indirect^2 to 0
+		free_block(delete_data_block);
+		indirect_block[direct_index(remove_block)] = 0;
+	}
+	// error: something somewhere went wrong
+	else
+	{
+		return -EIO;
+	}
+
+	// update size
+	// since we only remove 1 data block of useful information, decrease size
+	// of inode by only 1 block's worth of bits
+	oi->oi_size = (n-1) * OSPFS_BLKSIZE;
+	return 0;
 }
 
 
