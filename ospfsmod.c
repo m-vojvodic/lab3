@@ -1499,12 +1499,12 @@ ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dent
 		return PTR_ERR(od);
 
 	// copy the file name into the direntry
-	int i;
-	for(i = 0; i < dst_dentry->d_name.len; i++)
+	int j;
+	for(j = 0; j < dst_dentry->d_name.len; j++)
 	{
-		od->od_name[i] = dst_dentry->d_name.name[i];
+		od->od_name[j] = dst_dentry->d_name.name[j];
 	}
-	od->od_name[i] = '\0';
+	od->od_name[j] = '\0';
 
 	// set inode equal to src inode
 	od->od_ino = src_dentry->d_inode->i_ino;
@@ -1576,12 +1576,12 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 		return PTR_ERR(od);
 
 	// copy the file name into the direntry
-	int i;
-	for(i = 0; i < dentry->d_name.len; i++)
+	uint32_t j;
+	for(j = 0; j < dentry->d_name.len; j++)
 	{
-		od->od_name[i] = dentry->d_name.name[i];
+		od->od_name[j] = dentry->d_name.name[j];
 	}
-	od->od_name[i] = '\0';
+	od->od_name[j] = '\0';
 
 	// find a free inode
 	ospfs_inode_t* od_free_inode;
@@ -1589,8 +1589,9 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	uint32_t inodes_read;
 	for(inodes_read = 0; inodes_read < ospfs_super->os_ninodes; inodes_read++)
 	{
+		od_free_inode = od_free_inode + inodes_read;
 		// found free inode
-		if((od_free_inode + inodes_read)->oi_nlink == 0)
+		if(od_free_inode->oi_nlink == 0)
 		{
 			entry_ino = inodes_read;
 			break;
@@ -1605,6 +1606,18 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 
 	// set direntry's inode number
 	od->od_ino = entry_ino;
+
+	// initialize rest of inode
+	od_free_inode->oi_size = 0;
+	od_free_inode->oi_ftype = OSPFS_FTYPE_REG;
+	od_free_inode->oi_nlink = 0;
+	od_free_inode->oi_mode = mode;
+	for(j = 0; j < OSPFS_NDIRECT; j++)
+	{
+		od_free_inode->oi_direct[j] = 0;
+	}
+	od_free_inode->oi_indirect = 0;
+	od_free_inode->oi_indirect2 = 0;
 
 	/* Execute this code after your function has successfully created the
 	   file.  Set entry_ino to the created file's inode number before
