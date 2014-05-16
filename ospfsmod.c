@@ -1506,13 +1506,59 @@ ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dent
 //
 //   EXERCISE: Complete this function.
 
+
 static int
 ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidata *nd)
 {
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
-	uint32_t entry_ino = 0;
+	uint32_t entry_ino = -1;
 	/* EXERCISE: Your code here. */
-	return -EINVAL; // Replace this line
+	//return -EINVAL; // Replace this line
+
+	// if dentry->d_name.len > OSPFS_MAXNAMELEN
+	// return -ENAMETOOLONG
+	if(dentry->d_name.len > OSPFS_MAXNAMELEN)
+	{
+		return -ENAMETOOLONG;
+	}
+	// for each direntry in dir,
+	// compare dentry->d_name.name with name of file
+	// if nonzero, return -EEXIST
+	ospfs_direntry_t* od_entry;
+	od_entry = find_direntry(dir_oi, dentry->d_name.name, dentry->d_name.len);
+	if(od_entry != 0)
+	{
+		return -EEXIST;
+	}
+
+	// create a new directory entry
+	od_entry = create_blank_direntry(dir_oi);
+	// copy the name
+	int i;
+	for(i = 0; i < dentry->d_name.len; i++)
+	{
+		od_entry->od_name[i] = dentry->d_name.name[i];
+	}
+	od_entry->od_name[i] = '\0';
+	// set the entry's inode
+	ospfs_inode_t* od_free_inode;
+	od_free_inode = ospfs_block(ospfs_super->os_firstinob);
+	uint32_t inodes_read;
+	for(inodes_read = 0; inodes_read < ospfs_super->os_ninodes; inodes_read++)
+	{
+		// found free inode
+		if((od_free_inode + inodes_read)->oi_nlink == 0)
+		{
+			entry_ino = inodes_read;
+			break;
+		}
+	}
+
+	// no free inode -> no free space
+	if(entry_ino == -1)
+	{
+		return -ENOSPC;
+	}
 
 	/* Execute this code after your function has successfully created the
 	   file.  Set entry_ino to the created file's inode number before
@@ -1525,7 +1571,6 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 		return 0;
 	}
 }
-
 
 // ospfs_symlink(dirino, dentry, symname)
 //   Linux calls this function to create a symbolic link.
