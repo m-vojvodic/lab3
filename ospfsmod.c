@@ -1422,6 +1422,7 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 	ospfs_direntry_t* od;
 	int errval;
 
+	// change for more than one block
 	for(pos = 0; pos < dir_size; pos += 128)
 	{
 		od = ospfs_inode_data(dir_oi, pos);
@@ -1513,34 +1514,37 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	uint32_t entry_ino = -1;
 	/* EXERCISE: Your code here. */
-	//return -EINVAL; // Replace this line
 
-	// if dentry->d_name.len > OSPFS_MAXNAMELEN
-	// return -ENAMETOOLONG
+	// check if name is too long
 	if(dentry->d_name.len > OSPFS_MAXNAMELEN)
 	{
 		return -ENAMETOOLONG;
 	}
-	// for each direntry in dir,
-	// compare dentry->d_name.name with name of file
-	// if nonzero, return -EEXIST
-	ospfs_direntry_t* od_entry;
-	od_entry = find_direntry(dir_oi, dentry->d_name.name, dentry->d_name.len);
-	if(od_entry != 0)
+
+	// check if file with name already exists in directory
+	ospfs_direntry_t* od;
+	od = find_direntry(dir_oi, dentry->d_name.name, dentry->d_name.len);
+	if(od != 0)
 	{
 		return -EEXIST;
 	}
 
 	// create a new directory entry
-	od_entry = create_blank_direntry(dir_oi);
-	// copy the name
+	od = create_blank_direntry(dir_oi);
+
+	// if something went wrong, return the pointer
+	if(IS_ERR(od))
+		return PTR_ERR(od);
+
+	// copy the file name into the direntry
 	int i;
 	for(i = 0; i < dentry->d_name.len; i++)
 	{
-		od_entry->od_name[i] = dentry->d_name.name[i];
+		od->od_name[i] = dentry->d_name.name[i];
 	}
-	od_entry->od_name[i] = '\0';
-	// set the entry's inode
+	od->od_name[i] = '\0';
+
+	// find a free inode
 	ospfs_inode_t* od_free_inode;
 	od_free_inode = ospfs_block(ospfs_super->os_firstinob);
 	uint32_t inodes_read;
@@ -1559,6 +1563,9 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	{
 		return -ENOSPC;
 	}
+
+	// set direntry's inode number
+	od->od_ino = entry_ino;
 
 	/* Execute this code after your function has successfully created the
 	   file.  Set entry_ino to the created file's inode number before
