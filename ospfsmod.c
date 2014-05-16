@@ -427,6 +427,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	uint32_t f_pos = filp->f_pos;
 	int r = 0;		/* Error return value, if any */
 	int ok_so_far = 0;	/* Return value from 'filldir' */
+	const int num_dirents = (dir_oi->oi_size / 128) + 2; // there are 128 total entries plus '.' and '..'	
 
 	// f_pos is an offset into the directory's data, plus two.
 	// The "plus two" is to account for "." and "..".
@@ -446,13 +447,17 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	while (r == 0 && ok_so_far >= 0 && f_pos >= 2) {
 		ospfs_direntry_t *od;
 		ospfs_inode_t *entry_oi;
+		uint32_t dir_type = 0;
 
 		/* If at the end of the directory, set 'r' to 1 and exit
 		 * the loop.  For now we do this all the time.
 		 *
 		 * EXERCISE: Your code here */
-		r = 1;		/* Fix me! */
-		break;		/* Fix me! */
+		if(f_pos >= num_dirents)
+		{
+			r = 1;		/* Fix me! */
+			break;		/* Fix me! */
+		}
 
 		/* Get a pointer to the next entry (od) in the directory.
 		 * The file system interprets the contents of a
@@ -475,6 +480,30 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		 */
 
 		/* EXERCISE: Your code here */
+		od = ospfs_inode_data(dir_oi, (f_pos - 2) * 128);
+		if(od->od_ino != 0) // inode 0 is reserved and must not be used
+		{
+			entry_oi = ospfs_inode(od->od_ino);
+			switch(entry_oi->oi_ftype)
+			{
+				case OSPFS_FTYPE_REG:
+					dir_type = DT_REG;
+					break;
+				case OSPFS_FTYPE_DIR:
+					dir_type = DT_DIR;
+					break;
+				case OSPFS_FTYPE_SYMLINK: 
+					dir_type = DT_LNK;
+					break;
+			}
+			
+			ok_so_far = filldir(dirent, od->od_name, strlen(od->od_name), f_pos, od->od_ino, dir_type);
+		}
+		
+		if(ok_so_far >= 0)
+		{
+			f_pos++;
+		}
 	}
 
 	// Save the file position and return!
@@ -1209,7 +1238,7 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 		// into user space.
 		// Use variable 'n' to track number of bytes moved.
 		/* EXERCISE: Your code here */
-		uint32_t offset = (*f_pos % OSPFS_BLKSIZE); // remainder if we have already used some of the block
+		uint32_t offset = (*f_pos % OSPFS_BLKSIZE); // offset into the current block
                 // check if you can read in an entire block or not
                 if(((count + offset) - amount) > OSPFS_BLKSIZE)
                 {
@@ -1388,7 +1417,29 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 	//    entries and return one of them.
 
 	/* EXERCISE: Your code here. */
-	return ERR_PTR(-EINVAL); // Replace this line
+	uint32_t dir_size = dir_oi->oi_size;
+	uint32_t pos;
+	ospfs_direntry_t* od;
+	int errval;
+
+	for(pos = 0; pos < dir_size; pos += 128)
+	{
+		od = ospfs_inode_data(dir_oi, pos);
+		if(od->od_ino == 0)
+		{
+			return od;
+		}
+	}
+
+	errval = change_size(dir_oi, dir_size + 128); // directory entries are cleared out in add_block function used by change_size
+	if(errval != 0)
+	{
+		return ERR_PTR(errval);
+	}
+	
+	od = ospfs_inode_data(dir_oi, dir_size); // get data for new direntry
+	od->od_ino = 0; // inode of 0 means empty direntry
+	return od;
 }
 
 // ospfs_link(src_dentry, dir, dst_dentry
