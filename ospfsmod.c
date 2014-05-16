@@ -427,7 +427,9 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	uint32_t f_pos = filp->f_pos;
 	int r = 0;		/* Error return value, if any */
 	int ok_so_far = 0;	/* Return value from 'filldir' */
-	const int num_dirents = (dir_oi->oi_size / 128) + 2; // there are 128 total entries plus '.' and '..'	
+
+	// there are size in bytes/128 bytes per direntry total entries in a directory
+	const int num_dirents = (dir_oi->oi_size / 128);	
 
 	// f_pos is an offset into the directory's data, plus two.
 	// The "plus two" is to account for "." and "..".
@@ -480,7 +482,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		 */
 
 		/* EXERCISE: Your code here */
-		od = ospfs_inode_data(dir_oi, (f_pos - 2) * 128);
+		od = ospfs_inode_data(dir_oi, f_pos * 128);
 		if(od->od_ino != 0) // inode 0 is reserved and must not be used
 		{
 			entry_oi = ospfs_inode(od->od_ino);
@@ -1475,7 +1477,44 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 static int
 ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dentry) {
 	/* EXERCISE: Your code here. */
-	return -EINVAL;
+	// pointer to directory inode, directory entry
+	ospfs_inode_t* dir_oi;
+	dir_oi = ospfs_inode(dir->i_ino);
+
+	// check if name is too long
+	if(dst_dentry->d_name.len > OSPFS_MAXNAMELEN)
+		return -ENAMETOOLONG;
+
+	ospfs_direntry_t* od;
+	// check if file with name already exists
+	od = find_direntry(dir_oi, dst_dentry->d_name.name, dst_dentry->d_name.len);
+	if(od != 0)
+		return -EEXIST;
+
+	// create a new directory entry
+	od = create_blank_direntry(dir_oi);
+
+	// if something went wrong, return the pointer
+	if(IS_ERR(od))
+		return PTR_ERR(od);
+
+	// copy the file name into the direntry
+	int i;
+	for(i = 0; i < dst_dentry->d_name.len; i++)
+	{
+		od->od_name[i] = dst_dentry->d_name.name[i];
+	}
+	od->od_name[i] = '\0';
+
+	// set inode equal to src inode
+	od->od_ino = src_dentry->d_inode->i_ino;
+
+	// increment inode's link count
+	ospfs_inode_t* oi;
+	oi = ospfs_inode(src_dentry->d_inode->i_ino);
+	oi->oi_nlink++;
+
+	return 0;
 }
 
 // ospfs_create
@@ -1711,6 +1750,6 @@ module_init(init_ospfs_fs)
 module_exit(exit_ospfs_fs)
 
 // Information about the module
-MODULE_AUTHOR("Skeletor");
+MODULE_AUTHOR("Karan Kajla & Marko Vojvodic");
 MODULE_DESCRIPTION("OSPFS");
 MODULE_LICENSE("GPL");
