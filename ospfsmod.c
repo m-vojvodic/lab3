@@ -1282,6 +1282,7 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 //   the end of the file; this should simply change the file's size.
 //
 //   EXERCISE: Complete this function.
+//   TODO: fix for large files
 
 static ssize_t
 ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *f_pos)
@@ -1589,13 +1590,13 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	uint32_t inodes_read;
 	for(inodes_read = 0; inodes_read < ospfs_super->os_ninodes; inodes_read++)
 	{
-		od_free_inode = od_free_inode + inodes_read;
 		// found free inode
 		if(od_free_inode->oi_nlink == 0)
 		{
 			entry_ino = inodes_read;
 			break;
 		}
+		od_free_inode = od_free_inode + 1;
 	}
 
 	// no free inode -> no free space
@@ -1610,7 +1611,7 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	// initialize rest of inode
 	od_free_inode->oi_size = 0;
 	od_free_inode->oi_ftype = OSPFS_FTYPE_REG;
-	od_free_inode->oi_nlink = 0;
+	od_free_inode->oi_nlink = 1;
 	od_free_inode->oi_mode = mode;
 	for(j = 0; j < OSPFS_NDIRECT; j++)
 	{
@@ -1657,10 +1658,81 @@ static int
 ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 {
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
-	uint32_t entry_ino = 0;
-
+	uint32_t entry_ino = -1;
 	/* EXERCISE: Your code here. */
-	return -EINVAL;
+	// check if name too long
+	uint32_t symnamelen = strlen(symname);
+	if(dentry->d_name.len > OSPFS_MAXNAMELEN || 
+		symnamelen > OSPFS_MAXSYMLINKLEN)
+	{
+		return -ENAMETOOLONG;
+	}
+
+	// check if file with either name already exists in directory
+	ospfs_direntry_t* od;
+	ospfs_direntry_t* od_sym;
+	od = find_direntry(dir_oi, dentry->d_name.name, dentry->d_name.len);
+	od_sym = find_direntry(dir_oi, symname, symnamelen);
+	if(od != 0 || od_sym == 0)
+	{
+		return -EEXIST;
+	}
+
+	// create a new directory entry
+	od = create_blank_direntry(dir_oi);
+
+	// if something went wrong, return the pointer
+	if(IS_ERR(od))
+		return PTR_ERR(od);
+
+	// copy the file name into the direntry
+	uint32_t j;
+	for(j = 0; j < dentry->d_name.len; j++)
+	{
+		od->od_name[j] = dentry->d_name.name[j];
+	}
+	od->od_name[j] = '\0';
+
+	// find a free inode
+	ospfs_inode_t* od_free_inode;
+	od_free_inode = ospfs_block(ospfs_super->os_firstinob);
+	uint32_t inodes_read;
+	for(inodes_read = 0; inodes_read < ospfs_super->os_ninodes; inodes_read++)
+	{
+		// found free inode
+		if(od_free_inode->oi_nlink == 0)
+		{
+			entry_ino = inodes_read;
+			break;
+		}
+		od_free_inode = od_free_inode + 1;
+	}
+
+	// no free inode -> no free space
+	if(entry_ino == -1)
+	{
+		return -ENOSPC;
+	}
+
+	// set direntry's inode number
+	od->od_ino = entry_ino;
+
+	// find the inode of the file to be linked to
+	ospfs_inode_t* od_file = ospfs_inode(od_sym->od_ino);
+
+	// initialize symlink_inode
+	ospfs_symlink_inode_t* od_sym_inode;
+	od_sym_inode = (ospfs_symlink_inode_t*)ospfs_inode(entry_ino);
+	od_sym_inode->oi_ftype = OSPFS_FTYPE_SYMLINK;
+	od_sym_inode->oi_nlink = 1;
+	// size of file to be linked to
+	od_sym_inode->oi_size = od_file->oi_size;
+	for(j = 0; j < symnamelen; j++)
+	{
+		od_sym_inode->oi_symlink[j] = symname[j];
+	}
+	od_sym_inode->oi_symlink[j] = '\0';
+	
 
 	/* Execute this code after your function has successfully created the
 	   file.  Set entry_ino to the created file's inode number before
