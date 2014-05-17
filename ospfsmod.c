@@ -707,7 +707,7 @@ direct_index(uint32_t b)
 		return b;
 	// if b is on of indirect blocks
 	else if(b < OSPFS_NDIRECT + OSPFS_NINDIRECT)
-		return b - OSPFS_NINDIRECT;
+		return b - OSPFS_NDIRECT;
 	// if b is in any indirect block of a doubly indirect block
 	else
 		return (b - OSPFS_NDIRECT - OSPFS_NINDIRECT) % OSPFS_NINDIRECT;
