@@ -707,7 +707,7 @@ direct_index(uint32_t b)
 		return b;
 	// if b is on of indirect blocks
 	else if(b < OSPFS_NDIRECT + OSPFS_NINDIRECT)
-		return b - OSPFS_NINDIRECT;
+		return b - OSPFS_NDIRECT;
 	// if b is in any indirect block of a doubly indirect block
 	else
 		return (b - OSPFS_NDIRECT - OSPFS_NINDIRECT) % OSPFS_NINDIRECT;
@@ -1304,7 +1304,11 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 	/* EXERCISE: Your code here */
 	if((*f_pos + count) > oi->oi_size)
         {
-                change_size(oi, count + *f_pos);
+                if(change_size(oi, count + *f_pos) < 0)
+		{
+			retval = -EIO;
+			goto done;
+		}
         }
 
 	// Copy data block by block
@@ -1325,8 +1329,9 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 		// read user space.
 		// Keep track of the number of bytes moved in 'n'.
 		/* EXERCISE: Your code here */
+
 		uint32_t offset = (*f_pos % OSPFS_BLKSIZE); // remainder if we have already used some of the block
-                // Check if you can write an entire block or not
+		// Check if you can write an entire block or not
                 if(((count + offset) - amount) > OSPFS_BLKSIZE)
                 {
                         n = OSPFS_BLKSIZE - offset;
