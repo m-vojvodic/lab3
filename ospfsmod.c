@@ -58,13 +58,10 @@ static ospfs_direntry_t *find_direntry(ospfs_inode_t *dir_oi, const char *name, 
  *                           >0, OSPFS should write the block and decrement
  *                               the value of nwrites_to_crash.
  *
- *   The variable and helper function to check if the OSPFS should crash are
- *   defined below. nwrites_to_crash is initialized so that the system acts 
- *   normally.
+ *   The helper function to check if the OSPFS should crash are
+ *   defined below. nwrites_to_crash is initialized in ospfs.h so that the 
+ *   system acts normally.
  */
-
-// The number of writes the ramdisk has until "crash".
-static int nwrites_to_crash = -1;
 
 // Function to help determine how OSPFS should act.
 static int check_nwrites(int nwrites_left)
@@ -86,6 +83,8 @@ static int check_nwrites(int nwrites_left)
 	{
 		return 1;
 	}
+	printk("error: bad value for nwrites_left\n");
+	exit(1);
 }	
 
 /*****************************************************************************
@@ -1338,7 +1337,7 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 	// use struct file's f_flags field and the O_APPEND bit.
 	/* EXERCISE: Your code here */
 	// DESIGN: check if we can write to disk
-	if(check_nwrites)
+	if(check_nwrites(nwrites_to_crash))
 	{
 		// "crashed" - silently fail
 		return 0;
@@ -1534,7 +1533,7 @@ static int
 ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dentry) {
 	/* EXERCISE: Your code here. */
 	// DESIGN: check if it is possible to write to disk
-	if(check_nwrites)
+	if(check_nwrites(nwrites_to_crash))
 	{
 		// "crashed" - silently fail
 		return 0;
@@ -1617,7 +1616,7 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	uint32_t entry_ino = -1;
 	/* EXERCISE: Your code here. */
 	// DESIGN: check if it is possible to write to disk
-	if(check_nwrites)
+	if(check_nwrites(nwrites_to_crash))
 	{
 		// "crashed" - silently fail
 		return 0;
@@ -1729,7 +1728,7 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	uint32_t entry_ino = -1;
 	/* EXERCISE: Your code here. */
 	// DESIGN: check if it is possible to write to disk
-	if(check_nwrites)
+	if(check_nwrites(nwrites_to_crash))
 	{
 		// "crashed" - silently fail
 		return 0;
