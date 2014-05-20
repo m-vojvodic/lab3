@@ -43,6 +43,50 @@ static ospfs_super_t * const ospfs_super =
 static int change_size(ospfs_inode_t *oi, uint32_t want_size);
 static ospfs_direntry_t *find_direntry(ospfs_inode_t *dir_oi, const char *name, int namelen);
 
+/*****************************************************************************
+ *   DESIGN PROJECT - OSPFS CRASH TESTING
+ *
+ *   nwrites_to_crash is the number of writes the OSPFS can accomodate before
+ *   it "crashes." The user can set this variable by making the system call
+ *   TODO: (insert system call name here). There are 3 cases to be considered.
+ *
+ *   If nwrites_to_crash is:
+ *                           -1, OSPFS should act as normal.
+ *                            0, the file system has "crashed": every write to
+ *                               disk will silently fail. Consider a write any
+ *                               any time we write, create, or delete a file. 
+ *                           >0, OSPFS should write the block and decrement
+ *                               the value of nwrites_to_crash.
+ *
+ *   The variable and helper function to check if the OSPFS should crash are
+ *   defined below. nwrites_to_crash is initialized so that the system acts 
+ *   normally.
+ */
+
+// The number of writes the ramdisk has until "crash".
+static int nwrites_to_crash = -1;
+
+// Function to help determine how OSPFS should act.
+static int check_nwrites(int nwrites_left)
+{
+	// if -1, proceed as normal
+	if(nwrites_left == -1)
+	{
+		return 0;
+	}
+	// if greater than 0, decrement the number of writes left
+	// to crash and proceed as normal
+	else if(nwrites_left > 0)
+	{
+		nwrites_to_crash--;
+		return 0;
+	}
+	// if 0 writes left, do not proceed with operation
+	else if(nwrites_left == 0)
+	{
+		return 1;
+	}
+}	
 
 /*****************************************************************************
  * FILE SYSTEM OPERATIONS STRUCTURES
@@ -1282,7 +1326,6 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 //   the end of the file; this should simply change the file's size.
 //
 //   EXERCISE: Complete this function.
-//   TODO: fix for large files
 
 static ssize_t
 ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *f_pos)
@@ -1294,6 +1337,13 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 	// Support files opened with the O_APPEND flag.  To detect O_APPEND,
 	// use struct file's f_flags field and the O_APPEND bit.
 	/* EXERCISE: Your code here */
+	// DESIGN: check if we can write to disk
+	if(check_nwrites)
+	{
+		// "crashed" - silently fail
+		return 0;
+	}
+
 	if(filp->f_flags & O_APPEND)
         {
                 *f_pos = oi->oi_size;
@@ -1483,6 +1533,13 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 static int
 ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dentry) {
 	/* EXERCISE: Your code here. */
+	// DESIGN: check if it is possible to write to disk
+	if(check_nwrites)
+	{
+		// "crashed" - silently fail
+		return 0;
+	}
+
 	// pointer to directory inode, directory entry
 	ospfs_inode_t* dir_oi;
 	dir_oi = ospfs_inode(dir->i_ino);
@@ -1559,6 +1616,12 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	uint32_t entry_ino = -1;
 	/* EXERCISE: Your code here. */
+	// DESIGN: check if it is possible to write to disk
+	if(check_nwrites)
+	{
+		// "crashed" - silently fail
+		return 0;
+	}
 
 	// check if name is too long
 	if(dentry->d_name.len > OSPFS_MAXNAMELEN)
@@ -1665,6 +1728,13 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	uint32_t entry_ino = -1;
 	/* EXERCISE: Your code here. */
+	// DESIGN: check if it is possible to write to disk
+	if(check_nwrites)
+	{
+		// "crashed" - silently fail
+		return 0;
+	}
+
 	// check if name too long
 	uint32_t symnamelen = strlen(symname);
 	if(dentry->d_name.len > OSPFS_MAXNAMELEN || 
