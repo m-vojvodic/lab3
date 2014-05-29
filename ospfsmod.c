@@ -14,6 +14,7 @@
 #include <asm/uaccess.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/ioctl.h>
 
 /****************************************************************************
  * ospfsmod
@@ -63,9 +64,14 @@ static ospfs_direntry_t *find_direntry(ospfs_inode_t *dir_oi, const char *name, 
  *   system acts normally.
  */
 
+// The number of writes remaining before the fs crashes, init to -1 for good fs.
+int nwrites_to_crash = -1;
+
+
 // Function to help determine how OSPFS should act.
 static int check_nwrites(int nwrites_left)
 {
+	printk("%d\n", nwrites_to_crash);
 	// if -1, proceed as normal
 	if(nwrites_left == -1)
 	{
@@ -76,6 +82,7 @@ static int check_nwrites(int nwrites_left)
 	else if(nwrites_left > 0)
 	{
 		nwrites_to_crash--;
+		printk("decremented nwrites_to_crash, value is now: %d\n", nwrites_to_crash);
 		return 0;
 	}
 	// if 0 writes left, do not proceed with operation
@@ -84,7 +91,29 @@ static int check_nwrites(int nwrites_left)
 		return 1;
 	}
 	printk("error: bad value for nwrites_left\n");
-	exit(1);
+	return 1;
+}
+
+// The ioctl call handler which handles one type of ioctl call (SET_NWRITES).
+int device_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg)
+{
+	int c;	
+
+	switch(cmd)
+	{
+		case SET_NWRITES:
+			if(copy_from_user(&c, (int)arg, sizeof(int)))
+			{
+				return -EACCES;
+			}
+			nwrites_to_crash = c;
+			break;
+
+		default:
+			return -EINVAL;
+	}
+
+	return 0;
 }	
 
 /*****************************************************************************
@@ -1856,35 +1885,37 @@ static struct file_system_type ospfs_fs_type = {
 };
 
 static struct inode_operations ospfs_reg_inode_ops = {
-	.setattr	= ospfs_notify_change
+	.setattr	= ospfs_notify_change,
 };
 
 static struct file_operations ospfs_reg_file_ops = {
 	.llseek		= generic_file_llseek,
 	.read		= ospfs_read,
-	.write		= ospfs_write
+	.write		= ospfs_write,
+	.ioctl		= device_ioctl  // map ioctl to device_ioctl
 };
+
 
 static struct inode_operations ospfs_dir_inode_ops = {
 	.lookup		= ospfs_dir_lookup,
 	.link		= ospfs_link,
 	.unlink		= ospfs_unlink,
 	.create		= ospfs_create,
-	.symlink	= ospfs_symlink
+	.symlink	= ospfs_symlink,
 };
 
 static struct file_operations ospfs_dir_file_ops = {
 	.read		= generic_read_dir,
-	.readdir	= ospfs_dir_readdir
+	.readdir	= ospfs_dir_readdir,
 };
 
 static struct inode_operations ospfs_symlink_inode_ops = {
 	.readlink	= generic_readlink,
-	.follow_link	= ospfs_follow_link
+	.follow_link	= ospfs_follow_link,
 };
 
 static struct dentry_operations ospfs_dentry_ops = {
-	.d_delete	= ospfs_delete_dentry
+	.d_delete	= ospfs_delete_dentry,
 };
 
 static struct super_operations ospfs_superblock_ops = {

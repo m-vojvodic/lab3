@@ -1,8 +1,8 @@
 #ifndef OSPFS_H
 #define OSPFS_H
-// DESIGN
+
+// DESIGN LAB
 #include <linux/ioctl.h>
-int nwrites_to_crash = -1;
 #define SET_NWRITES _IOW('c', 1, int)
 
 // OSPFS Constants and Structure Definitions
