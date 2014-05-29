@@ -8,14 +8,14 @@
 
 int main(int argc, char **argv)
 {
-	char *file_name = "./ospfs/";	//"./test/ospfs_crash";
+	char *file_name = "./test/ospfs_crash";
 	int fd;
-	int nwrites;
-	int ioctl_retval;
+	unsigned long nwrites;
+	unsigned long ioctl_retval;
 	
 	if(argc == 2)
 	{
-		nwrites = (int)*argv[1];
+		nwrites = strtol(argv[1], &nwrites, 10);
 	}
 	else
 	{
@@ -23,7 +23,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	fd = open(file_name, O_RDWR);
+	fd = open(file_name, O_RDONLY);
 	if(fd == -1)
 	{
 		fprintf(stderr, "File could not be opened properly.\n");
@@ -31,11 +31,6 @@ int main(int argc, char **argv)
 	}
 
 	ioctl_retval = ioctl(fd, SET_NWRITES, nwrites);
-	/*if(ioctl_retval == -EACCES || ioctl_retval == -EINVAL)
-	{
-		fprintf(stderr, "IOCTL returned Error!\n");
-		return -1;
-	}*/
 
 	close(fd);
 	return ioctl_retval;

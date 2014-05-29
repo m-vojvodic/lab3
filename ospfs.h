@@ -3,7 +3,8 @@
 
 // DESIGN LAB
 #include <linux/ioctl.h>
-#define SET_NWRITES _IOW('c', 1, int)
+//#define SET_NWRITES _IOW('c', 1, int)
+#define SET_NWRITES 69
 
 // OSPFS Constants and Structure Definitions
 
