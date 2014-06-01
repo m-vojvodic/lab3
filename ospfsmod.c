@@ -97,16 +97,14 @@ static int check_nwrites(int nwrites_left)
 // The ioctl call handler which handles one type of ioctl call (SET_NWRITES).
 int device_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg)
 {
-	int c;	
-
 	switch(cmd)
 	{
 		case SET_NWRITES:
-			if(copy_from_user(&c, (int)arg, sizeof(int)))
+			/*if(copy_from_user(&nwrites_to_crash, (int)arg, sizeof(int)))
 			{
 				return -EACCES;
-			}
-			nwrites_to_crash = c;
+			}*/
+			nwrites_to_crash = arg;
 			break;
 
 		default:

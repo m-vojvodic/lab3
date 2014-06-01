@@ -38,7 +38,7 @@ close FOO;
       "Hello, worlds galore"
     ],
     
-    [ "echo 'Hello, world!' > test/hello.txt ; cat test/hello.txt",
+    [ "echo 'Hello, world!' | test/hello.txt ; cat test/hello.txt",
       "Hello, world!"
     ],
     

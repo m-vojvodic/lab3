@@ -10,8 +10,8 @@ int main(int argc, char **argv)
 {
 	char *file_name = "./test/ospfs_crash";
 	int fd;
-	unsigned long nwrites;
-	unsigned long ioctl_retval;
+	int nwrites;
+	int ioctl_retval;
 	
 	if(argc == 2)
 	{
