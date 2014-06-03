@@ -48,8 +48,9 @@ static ospfs_direntry_t *find_direntry(ospfs_inode_t *dir_oi, const char *name, 
  *   DESIGN PROJECT - OSPFS CRASH TESTING
  *
  *   nwrites_to_crash is the number of writes the OSPFS can accomodate before
- *   it "crashes." The user can set this variable by making the system call
- *   TODO: (insert system call name here). There are 3 cases to be considered.
+ *   it "crashes." The user can set this variable by using the system call
+ *   device_ioctl - user can access this through the application crashtest. 
+ *   There are 3 cases to be considered;
  *
  *   If nwrites_to_crash is:
  *                           -1, OSPFS should act as normal.
@@ -65,13 +66,12 @@ static ospfs_direntry_t *find_direntry(ospfs_inode_t *dir_oi, const char *name, 
  */
 
 // The number of writes remaining before the fs crashes, init to -1 for good fs.
-int nwrites_to_crash = -1;
+long nwrites_to_crash = -1;
 
 
 // Function to help determine how OSPFS should act.
-static int check_nwrites(int nwrites_left)
+static int check_nwrites(long nwrites_left)
 {
-	printk("%d\n", nwrites_to_crash);
 	// if -1, proceed as normal
 	if(nwrites_left == -1)
 	{
@@ -82,7 +82,6 @@ static int check_nwrites(int nwrites_left)
 	else if(nwrites_left > 0)
 	{
 		nwrites_to_crash--;
-		printk("decremented nwrites_to_crash, value is now: %d\n", nwrites_to_crash);
 		return 0;
 	}
 	// if 0 writes left, do not proceed with operation
@@ -100,13 +99,8 @@ int device_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsig
 	switch(cmd)
 	{
 		case SET_NWRITES:
-			/*if(copy_from_user(&nwrites_to_crash, (int)arg, sizeof(int)))
-			{
-				return -EACCES;
-			}*/
 			nwrites_to_crash = arg;
 			break;
-
 		default:
 			return -EINVAL;
 	}
